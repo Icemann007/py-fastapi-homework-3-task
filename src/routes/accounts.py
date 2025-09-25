@@ -41,7 +41,7 @@ async def register(user: UserRegistrationRequestSchema, db: AsyncSession = Depen
         raise HTTPException(status_code=409, detail=f"A user with this email {user.email} already exists.")
 
     role = await db.execute(select(UserGroupModel).where(UserGroupModel.name == UserGroupEnum.USER))
-    db_role = role.scalar_one()
+    db_role = role.scalar_one_or_none()
 
     try:
         db_user = UserModel.create(email=user.email, raw_password=user.password, group_id=db_role.id)
@@ -107,7 +107,7 @@ async def password_reset(data: PasswordResetCompleteRequestSchema, db: AsyncSess
     result = await db.execute(select(UserModel).where(UserModel.email == data.email))
     db_user = result.scalar_one_or_none()
 
-    if not db_user:
+    if not db_user or not db_user.is_active:
         raise HTTPException(status_code=400, detail="Invalid email or token.")
 
     token_result = await db.execute(
