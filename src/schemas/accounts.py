@@ -1,6 +1,7 @@
 from pydantic import BaseModel, EmailStr, field_validator, ConfigDict
 
-from database.validators.accounts import validate_email, validate_password_strength
+from database.validators import accounts
+from database.validators.accounts import validate_password_strength
 
 
 class UserBase(BaseModel):
@@ -8,10 +9,10 @@ class UserBase(BaseModel):
 
     @field_validator("email")
     def validate_email(cls, value):
-        return validate_email(value)
+        return accounts.validate_email(value)
 
 
-class UserCreate(UserBase):
+class UserRegistrationRequestSchema(UserBase):
     password: str
 
     @field_validator("password")
@@ -19,17 +20,21 @@ class UserCreate(UserBase):
         return validate_password_strength(value)
 
 
-class UserRead(UserBase):
+class UserRegistrationResponseSchema(UserBase):
     id: int
 
     model_config = ConfigDict(from_attributes=True)
 
 
-class UserActivate(UserBase):
+class UserActivationRequestSchema(UserBase):
     token: str
 
 
-class PasswordReset(UserBase):
+class PasswordResetRequestSchema(UserBase):
+    pass
+
+
+class PasswordResetCompleteRequestSchema(UserBase):
     token: str
     password: str
 
@@ -38,19 +43,19 @@ class PasswordReset(UserBase):
         return validate_password_strength(value)
 
 
-class UserLogin(UserCreate):
+class UserLoginRequestSchema(UserRegistrationRequestSchema):
     pass
 
 
-class LoginResponse(BaseModel):
+class UserLoginResponseSchema(BaseModel):
     access_token: str
     refresh_token: str
-    type: str = "bearer"
+    token_type: str = "bearer"
 
 
-class UpdateAccessToken(BaseModel):
+class TokenRefreshRequestSchema(BaseModel):
     refresh_token: str
 
 
-class NewAccessToken(BaseModel):
+class TokenRefreshResponseSchema(BaseModel):
     access_token: str

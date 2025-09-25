@@ -6,13 +6,13 @@ from schemas.movies import (
     MovieUpdateSchema
 )
 from schemas.accounts import (
-    UserBase,
-    UserCreate,
-    UserRead,
-    UserActivate,
-    PasswordReset,
-    UserLogin,
-    LoginResponse,
-    UpdateAccessToken,
-    NewAccessToken,
+    UserRegistrationRequestSchema,
+    UserRegistrationResponseSchema,
+    UserActivationRequestSchema,
+    PasswordResetRequestSchema,
+    PasswordResetCompleteRequestSchema,
+    UserLoginResponseSchema,
+    UserLoginRequestSchema,
+    TokenRefreshRequestSchema,
+    TokenRefreshResponseSchema
 )

@@ -18,24 +18,23 @@ from database import (
 )
 from exceptions import BaseSecurityError
 from schemas.accounts import (
-    UserRead,
-    UserCreate,
-    UserActivate,
-    UserBase,
-    PasswordReset,
-    UserLogin,
-    LoginResponse,
-    NewAccessToken,
-    UpdateAccessToken,
+    UserRegistrationRequestSchema,
+    UserRegistrationResponseSchema,
+    UserActivationRequestSchema,
+    PasswordResetRequestSchema,
+    UserLoginRequestSchema,
+    UserLoginResponseSchema,
+    TokenRefreshRequestSchema,
+    TokenRefreshResponseSchema,
+    PasswordResetCompleteRequestSchema,
 )
 from security.interfaces import JWTAuthManagerInterface
-from security.passwords import hash_password
 
 router = APIRouter()
 
 
-@router.post("/register/", response_model=UserRead, status_code=201)
-async def register(user: UserCreate, db: AsyncSession = Depends(get_db)):
+@router.post("/register/", response_model=UserRegistrationResponseSchema, status_code=201)
+async def register(user: UserRegistrationRequestSchema, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(UserModel).where(UserModel.email == user.email))
     db_user_email = result.scalar_one_or_none()
     if db_user_email:
@@ -45,8 +44,7 @@ async def register(user: UserCreate, db: AsyncSession = Depends(get_db)):
     db_role = role.scalar_one()
 
     try:
-        hashed_password = hash_password(user.password)
-        db_user = UserModel(email=user.email, _hashed_password=hashed_password, group_id=db_role.id)
+        db_user = UserModel.create(email=user.email, raw_password=user.password, group_id=db_role.id)
         db.add(db_user)
         await db.flush()
 
@@ -62,7 +60,7 @@ async def register(user: UserCreate, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/activate/")
-async def activate_user(data: UserActivate, db: AsyncSession = Depends(get_db)):
+async def activate_user(data: UserActivationRequestSchema, db: AsyncSession = Depends(get_db)):
     now = datetime.now(timezone.utc)
 
     db_token = await db.execute(
@@ -89,7 +87,7 @@ async def activate_user(data: UserActivate, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/password-reset/request/")
-async def request_password_reset(user: UserBase, db: AsyncSession = Depends(get_db)):
+async def request_password_reset(user: PasswordResetRequestSchema, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(UserModel).where(UserModel.email == user.email))
     db_user = result.scalar_one_or_none()
 
@@ -104,7 +102,7 @@ async def request_password_reset(user: UserBase, db: AsyncSession = Depends(get_
 
 
 @router.post("/reset-password/complete/")
-async def password_reset(data: PasswordReset, db: AsyncSession = Depends(get_db)):
+async def password_reset(data: PasswordResetCompleteRequestSchema, db: AsyncSession = Depends(get_db)):
     now = datetime.now(timezone.utc)
     result = await db.execute(select(UserModel).where(UserModel.email == data.email))
     db_user = result.scalar_one_or_none()
@@ -132,8 +130,7 @@ async def password_reset(data: PasswordReset, db: AsyncSession = Depends(get_db)
         await db.commit()
         raise HTTPException(status_code=400, detail="Invalid email or token.")
     try:
-        hashed_password = hash_password(data.password)
-        db_user._hashed_password = hashed_password
+        db_user.password = data.password
         await db.delete(token)
         await db.commit()
 
@@ -144,9 +141,9 @@ async def password_reset(data: PasswordReset, db: AsyncSession = Depends(get_db)
         raise HTTPException(status_code=500, detail="An error occurred while resetting the password.")
 
 
-@router.post("/login/", response_model=LoginResponse, status_code=201)
+@router.post("/login/", response_model=UserLoginResponseSchema, status_code=201)
 async def login(
-        data: UserLogin,
+        data: UserLoginRequestSchema,
         db: AsyncSession = Depends(get_db),
         jwt_manager: JWTAuthManagerInterface = Depends(get_jwt_auth_manager),
         settings: BaseAppSettings = Depends(get_settings)
@@ -173,18 +170,19 @@ async def login(
         db.add(db_refresh_token)
         await db.commit()
 
-        return LoginResponse(
+        return UserLoginResponseSchema(
             access_token=access_token,
             refresh_token=refresh_token,
         )
 
     except Exception:
+        await db.rollback()
         raise HTTPException(status_code=500, detail="An error occurred while processing the request.")
 
 
-@router.post("/refresh/", response_model=NewAccessToken)
+@router.post("/refresh/", response_model=TokenRefreshResponseSchema)
 async def refresh_access_token(
-        data: UpdateAccessToken,
+        data: TokenRefreshRequestSchema,
         db: AsyncSession = Depends(get_db),
         jwt_manager: JWTAuthManagerInterface = Depends(get_jwt_auth_manager)
 ):
@@ -208,4 +206,4 @@ async def refresh_access_token(
     payload = {"user_id": user.id}
     new_access_token = jwt_manager.create_access_token(payload)
 
-    return NewAccessToken(access_token=new_access_token)
+    return TokenRefreshResponseSchema(access_token=new_access_token)
